@@ -4,7 +4,7 @@
 # CONFIGURATION VARIABLES
 # ==============================================================================
 # Maximum number of files and folders to display in the interactive directory prompt.
-$MaxDisplayItems = 5
+$MaxDisplayItems = 15
 
 <#
 .SYNOPSIS
@@ -146,7 +146,7 @@ function Get-RemoteRepositories {
             "list", 
             $FilterUser, 
             "--json", "nameWithOwner", 
-            "--limit", "1000", 
+            "--limit", "100", 
             "--jq", ".[].nameWithOwner"
         )
         
@@ -174,11 +174,14 @@ function Get-LocalRepositories {
 
     Write-Host "Searching for local Git repositories under ${StartDirectory}..." -ForegroundColor DarkGray
     
-    # Find all .git directories and extract the parent folder's name (the repo name)
-    # NOTE: This only finds folders that are valid Git repositories (contain a .git folder)
-    $LocalRepos = Get-ChildItem -Path $StartDirectory -Filter ".git" -Recurse -Directory -ErrorAction SilentlyContinue |
-                  Select-Object -ExpandProperty Directory |
-                  Select-Object -Property @{N='Name'; E={$_.Name}}, @{N='Path'; E={$_.FullName}}
+    # FIX: Modified the logic to explicitly check only direct subdirectories (Depth 1) 
+    # for a .git folder. This avoids issues with Get-ChildItem -Recurse sometimes missing
+    # immediate children that are expected to be the repos, which was causing the 
+    # "Found 0 local repository folders" error for the PULL ALL operation.
+    $LocalRepos = Get-ChildItem -Path $StartDirectory -Directory -Depth 1 -ErrorAction SilentlyContinue | Where-Object {
+        # Check if the subfolder contains a .git subdirectory
+        (Test-Path -Path (Join-Path -Path $_.FullName -ChildPath ".git") -PathType Container)
+    } | Select-Object -Property @{N='Name'; E={$_.Name}}, @{N='Path'; E={$_.FullName}}
     
     Write-Host "Found $($LocalRepos.Count) local repository folders (with a .git directory)." -ForegroundColor DarkGreen
     return $LocalRepos
